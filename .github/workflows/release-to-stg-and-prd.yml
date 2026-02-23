@@ -1,0 +1,61 @@
+name: Release to STG → PRD (print-only)
+
+on:
+  push:
+    branches: [ main ]    # triggers after a PR is merged into main
+  workflow_dispatch:
+    inputs:
+      release_label:
+        description: "Optional: release label (e.g., v1.2.3). If omitted, use latest commit."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  pick-release:
+    name: Resolve release identifier
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.resolve.outputs.label }}
+      sha:   ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: resolve
+        run: |
+          LABEL="${{ inputs.release_label }}"
+          if [ -z "$LABEL" ]; then
+            LABEL="commit-${GITHUB_SHA::7}"
+          fi
+          echo "label=$LABEL" >> $GITHUB_OUTPUT
+          echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "📦 Using release label: $LABEL (sha: ${GITHUB_SHA})"
+
+  deploy-stg:
+    name: STG approval gate (print-only)
+    needs: [pick-release]
+    runs-on: ubuntu-latest
+    environment:
+      name: STG           # Requires manual approval by STG environment reviewers
+      url: https://example.com/your-stg-system
+    steps:
+      - name: Print 'would deploy' to STG
+        run: |
+          echo "🚀 (STG) Would deploy release: ${{ needs.pick-release.outputs.label }}"
+          echo "SHA: ${{ needs.pick-release.outputs.sha }}"
+          echo "This step is gated by the STG environment approval."
+
+  deploy-prd:
+    name: PRD approval gate (print-only)
+    needs: [deploy-stg]
+    runs-on: ubuntu-latest
+    environment:
+      name: PRD           # Requires manual approval by PRD environment reviewers
+      url: https://example.com/your-prod-system
+    steps:
+      - name: Print 'would deploy' to PRD
+        run: |
+          echo "🚀 (PRD) Would deploy release: ${{ needs.pick-release.outputs.label }}"
+          echo "SHA: ${{ needs.pick-release.outputs.sha }}"
+          echo "This step is gated by the PRD environment approval."
